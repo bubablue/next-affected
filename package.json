@@ -1,0 +1,29 @@
+{
+  "name": "next-affected",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "bin": {
+    "next-affected": "./dist/index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@babel/parser": "^7.25.8",
+    "@babel/traverse": "^7.25.7",
+    "commander": "^12.1.0",
+    "glob": "^11.0.0",
+    "madge": "^8.0.0"
+  },
+  "devDependencies": {
+    "@types/commander": "^2.12.2",
+    "@types/madge": "^5.0.3",
+    "@types/node": "^22.7.5",
+    "typescript": "^5.6.3"
+  }
+}
