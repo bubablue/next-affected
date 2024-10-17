@@ -32,7 +32,12 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-        if: steps.cache-node-modules.outputs.cache-hit != 'true'
+
+      - name: Upload node_modules artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: node_modules
+          path: node_modules
 
   lint:
     runs-on: ubuntu-latest
@@ -47,15 +52,10 @@ jobs:
         with:
           node-version: 20
 
-      - name: Restore node_modules
-        uses: actions/cache@v3
+      - name: Download node_modules artifact
+        uses: actions/download-artifact@v3
         with:
-          path: node_modules
-          key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
-
-      - name: Install dependencies
-        if: needs.setup.outputs.node-modules-cache-hit != 'true'
-        run: npm ci
+          name: node_modules
 
       - name: Run linting
         run: npm run lint
@@ -73,15 +73,10 @@ jobs:
         with:
           node-version: 20
 
-      - name: Restore node_modules
-        uses: actions/cache@v3
+      - name: Download node_modules artifact
+        uses: actions/download-artifact@v3
         with:
-          path: node_modules
-          key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
-
-      - name: Install dependencies
-        if: needs.setup.outputs.node-modules-cache-hit != 'true'
-        run: npm ci
+          name: node_modules
 
       - name: Run tests
         run: npm test
@@ -99,15 +94,10 @@ jobs:
         with:
           node-version: 20
 
-      - name: Restore node_modules
-        uses: actions/cache@v3
+      - name: Download node_modules artifact
+        uses: actions/download-artifact@v3
         with:
-          path: node_modules
-          key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
-
-      - name: Install dependencies
-        if: needs.setup.outputs.node-modules-cache-hit != 'true'
-        run: npm ci
+          name: node_modules
 
       - name: Build project
         run: npm run build
