@@ -62,7 +62,7 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    needs: [setup, lint]
+    needs: setup
     steps:
       - uses: actions/checkout@v4
         with:
@@ -83,7 +83,7 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
-    needs: [setup, test]
+    needs: [setup, lint, test]
     steps:
       - uses: actions/checkout@v4
         with:
