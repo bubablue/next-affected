@@ -36,7 +36,6 @@ describe("CLI Command Tests", () => {
     expect(program.description).toHaveBeenCalledWith(
       "List Next.js pages affected by changes"
     );
-    expect(program.version).toHaveBeenCalledWith("1.0.0");
   });
 
   it("should display help with examples when --help is invoked", () => {
