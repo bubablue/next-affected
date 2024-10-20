@@ -9,7 +9,7 @@ const program = new Command();
 program
   .name("next-affected")
   .description("List Next.js pages affected by changes")
-  .version("0.0.3");
+  .version("0.1.0");
 
 program
   .command("init")
