@@ -5,41 +5,70 @@ export function getChangedFiles({
   head,
   projectDir,
   includeUncommitted = false,
+  onlyUncommitted = false,
 }: {
   base: string;
   head: string | null;
   projectDir: string;
   includeUncommitted?: boolean;
+  onlyUncommitted?: boolean;
 }): string[] {
   try {
-    if (!includeUncommitted && !head) {
-      throw new Error(
-        "Head commit must be specified when not including uncommitted changes."
-      );
-    }
+    let changedFiles: string[] = [];
 
-    const gitDiffCommand = includeUncommitted
-      ? `git diff --name-only ${base}`
-      : `git diff --name-only ${base} ${head}`;
+    if (onlyUncommitted) {
+      const diffStdout = execSync(`git diff --name-only`, { cwd: projectDir });
+      const diffFiles = diffStdout
+        .toString()
+        .trim()
+        .split("\n")
+        .filter((file) => file);
 
-    const diffStdout = execSync(gitDiffCommand, { cwd: projectDir });
-    const diffFiles = diffStdout
-      .toString()
-      .trim()
-      .split("\n")
-      .filter((file) => file);
+      const untrackedFiles = execSync(
+        `git ls-files --others --exclude-standard`,
+        { cwd: projectDir }
+      )
+        .toString()
+        .trim()
+        .split("\n")
+        .filter((file) => file);
 
-    const untrackedFiles = includeUncommitted
-      ? execSync(`git ls-files --others --exclude-standard`, {
-          cwd: projectDir,
-        })
+      changedFiles = [...diffFiles, ...untrackedFiles];
+    } else {
+      if (!includeUncommitted && !head) {
+        throw new Error(
+          "Head commit must be specified when not including uncommitted changes."
+        );
+      }
+
+      // Build the git diff command based on the flags
+      const gitDiffCommand = includeUncommitted
+        ? `git diff --name-only ${base}`
+        : `git diff --name-only ${base} ${head}`;
+
+      const diffStdout = execSync(gitDiffCommand, { cwd: projectDir });
+      const diffFiles = diffStdout
+        .toString()
+        .trim()
+        .split("\n")
+        .filter((file) => file);
+
+      if (includeUncommitted) {
+        // Include untracked files
+        const untrackedFiles = execSync(
+          `git ls-files --others --exclude-standard`,
+          { cwd: projectDir }
+        )
           .toString()
           .trim()
           .split("\n")
-          .filter((file) => file)
-      : [];
+          .filter((file) => file);
 
-    const changedFiles = [...diffFiles, ...untrackedFiles];
+        changedFiles = [...diffFiles, ...untrackedFiles];
+      } else {
+        changedFiles = diffFiles;
+      }
+    }
 
     return changedFiles;
   } catch (error) {

@@ -12,6 +12,7 @@ export async function runNextAffected(
     depth?: number;
     verbose?: boolean;
     uncommitted?: boolean;
+    onlyUncommitted?: boolean;
   }
 ): Promise<void> {
   try {
@@ -75,6 +76,7 @@ export async function runNextAffected(
         head: options.head ?? "HEAD",
         projectDir: projectDir,
         includeUncommitted: options.uncommitted ?? false,
+        onlyUncommitted: options.onlyUncommitted ?? false,
       });
 
       if (changedFiles.length === 0) {
