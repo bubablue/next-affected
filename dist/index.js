@@ -8,7 +8,7 @@ const program = new commander_1.Command();
 program
     .name("next-affected")
     .description("List Next.js pages affected by changes")
-    .version("1.0.0");
+    .version("0.0.2");
 program
     .command("init")
     .description("Initialize next-affected configuration")
@@ -23,12 +23,14 @@ program
     .option("-h, --head <commit>", "Head commit or branch", "HEAD")
     .option("-d, --depth <number>", "Max depth for dependency traversal", parseInt)
     .option("-v, --verbose", "Enable verbose logging")
+    .option("-u, --uncommitted", "Include uncommitted changes")
     .on("--help", () => {
     console.log("");
     console.log("Examples:");
     console.log("  $ next-affected run src/components/Button.tsx");
     console.log("  $ next-affected run --base main");
     console.log("  $ next-affected run --base commit1 --head commit2");
+    console.log("  $ next-affected run --include-uncommitted");
 })
     .action(async (componentPath, options) => {
     await (0, run_1.runNextAffected)(componentPath, options);

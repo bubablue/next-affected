@@ -11,6 +11,7 @@ export async function runNextAffected(
     head?: string;
     depth?: number;
     verbose?: boolean;
+    uncommitted?: boolean;
   }
 ): Promise<void> {
   try {
@@ -66,14 +67,15 @@ export async function runNextAffected(
       // Analyze changes between Git references
       console.log(
         `Getting changed files between ${options.base} and ${
-          options.head || "HEAD"
+          options.head ?? "HEAD"
         }`
       );
-      const changedFiles = getChangedFiles(
-        options.base,
-        options.head || "HEAD",
-        projectDir
-      );
+      const changedFiles = getChangedFiles({
+        base: options.base,
+        head: options.head ?? "HEAD",
+        projectDir: projectDir,
+        includeUncommitted: options.uncommitted ?? false,
+      });
 
       if (changedFiles.length === 0) {
         console.log(

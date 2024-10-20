@@ -10,11 +10,16 @@
 - [Features](#features)
 - [Installation](#installation)
 - [Usage](#usage)
+  - [Initialize Configuration](#initialize-configuration)
   - [Commands](#commands)
   - [Options](#options)
   - [Examples](#examples)
 - [Configuration](#configuration)
+  - [Default Configuration](#default-configuration)
+  - [Configuration Options](#configuration-options)
+  - [Customizing Configuration](#customizing-configuration)
 - [How It Works](#how-it-works)
+  - [Steps](#steps)
 - [Troubleshooting](#troubleshooting)
 - [License](#license)
 
@@ -22,6 +27,7 @@
 
 - **Analyze Specific Components**: Find out which Next.js pages are affected by changes in a specific component.
 - **Git Integration**: Compare changes between Git commits or branches to identify affected pages.
+- **Include Uncommitted Changes**: Optionally include uncommitted changes in your analysis.
 - **Customizable**: Supports custom configuration for page directories and file extensions to exclude.
 - **TypeScript Support**: Works seamlessly with TypeScript and recognizes path aliases from `tsconfig.json`.
 - **Verbose Logging**: Provides detailed logs for better debugging and analysis.
@@ -79,6 +85,7 @@ next-affected run [componentPath] [options]
 - `-p, --project <path>`: Path to the Next.js project. Defaults to `.` (current directory).
 - `-b, --base <commit>`: Base commit or branch to compare changes.
 - `-h, --head <commit>`: Head commit or branch to compare changes. Defaults to `HEAD`.
+- `-u, --uncommitted`: Include uncommitted changes in the analysis.
 - `-d, --depth <number>`: Max depth for dependency traversal.
 - `-v, --verbose`: Enable verbose logging.
 
@@ -90,6 +97,14 @@ Find all Next.js pages that are affected by changes in a specific component:
 
 ```bash
 next-affected run src/components/Button.tsx
+```
+
+#### Include Uncommitted Changes
+
+Analyze all changes including uncommitted (local) changes, listing the affected pages:
+
+```bash
+next-affected run --uncommitted --base main
 ```
 
 #### Compare Changes Between Current Branch and `main`
@@ -150,7 +165,7 @@ You can edit the `next-affected.config.json` file to suit your project's structu
 ### Steps:
 
 1. **Build Dependency Graph**: Uses [madge](https://github.com/pahen/madge) to build the dependency graph of your project.
-2. **Determine Changed Files**: If using Git comparison mode (`--base`), it determines the list of changed files between the two commits or branches.
+2. **Determine Changed Files**: If using Git comparison mode (`--base`), it determines the list of changed files between the two commits or branches. If `--uncommitted` is specified, it also includes uncommitted changes and untracked files.
 3. **Traverse Dependencies**: For each changed file or specified component, it traverses the dependency graph to find all dependent modules, up to the specified depth.
 4. **Identify Affected Pages**: Filters the dependent modules to identify which are Next.js pages based on the configured `pagesDirectories`.
 
@@ -158,12 +173,13 @@ You can edit the `next-affected.config.json` file to suit your project's structu
 
 - **No Affected Pages Found**: Ensure that the paths in `pagesDirectories` are correct and point to your Next.js pages.
 - **Errors Executing Git Command**: Verify that the commits or branches specified in `--base` and `--head` exist and are accessible.
+- **Including Uncommitted Changes Not Working**: Make sure you have saved your changes and that they are within the project directory specified.
 - **Verbose Logging**: Use the `--verbose` flag to enable detailed logging, which can help identify issues.
 
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
 
----
+## Contribute
 
 Feel free to open issues or contribute to the project!
