@@ -53,7 +53,7 @@ describe("runNextAffected", () => {
 
   beforeAll(() => {
     jest.spyOn(global.console, "log").mockImplementation(() => jest.fn());
-    jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    jest.spyOn(process.stdout, "write").mockImplementation(() => true);
   });
 
   beforeEach(() => {
@@ -98,11 +98,12 @@ describe("runNextAffected", () => {
 
     await runNextAffected(undefined, { ...options, base: "main" });
 
-    expect(getChangedFiles).toHaveBeenCalledWith(
-      "main",
-      "HEAD",
-      "/resolved/path"
-    );
+    expect(getChangedFiles).toHaveBeenCalledWith({
+      base: "main",
+      head: "HEAD",
+      includeUncommitted: false,
+      projectDir: "/resolved/path",
+    });
     expect(findAffectedPages).toHaveBeenCalledWith(
       expect.any(Object), // dependency graph
       "file1.js",

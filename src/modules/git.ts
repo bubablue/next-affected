@@ -1,15 +1,47 @@
 import { execSync } from "child_process";
 
-export function getChangedFiles(
-  base: string,
-  head: string,
-  projectDir: string
-): string[] {
-  const gitDiffCommand = `git diff --name-only ${base} ${head}`;
+export function getChangedFiles({
+  base,
+  head,
+  projectDir,
+  includeUncommitted = false,
+}: {
+  base: string;
+  head: string | null;
+  projectDir: string;
+  includeUncommitted?: boolean;
+}): string[] {
   try {
-    const stdout = execSync(gitDiffCommand, { cwd: projectDir });
-    const files = stdout.toString().trim().split("\n");
-    return files.filter((file) => file);
+    if (!includeUncommitted && !head) {
+      throw new Error(
+        "Head commit must be specified when not including uncommitted changes."
+      );
+    }
+
+    const gitDiffCommand = includeUncommitted
+      ? `git diff --name-only ${base}`
+      : `git diff --name-only ${base} ${head}`;
+
+    const diffStdout = execSync(gitDiffCommand, { cwd: projectDir });
+    const diffFiles = diffStdout
+      .toString()
+      .trim()
+      .split("\n")
+      .filter((file) => file);
+
+    const untrackedFiles = includeUncommitted
+      ? execSync(`git ls-files --others --exclude-standard`, {
+          cwd: projectDir,
+        })
+          .toString()
+          .trim()
+          .split("\n")
+          .filter((file) => file)
+      : [];
+
+    const changedFiles = [...diffFiles, ...untrackedFiles];
+
+    return changedFiles;
   } catch (error) {
     if (error instanceof Error) {
       console.error("Error executing Git command:", error.message);

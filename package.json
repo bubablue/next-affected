@@ -1,6 +1,6 @@
 {
   "name": "next-affected",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "description": "CLI tool to list Next.js pages affected by changes",
   "main": "./dist/index.js",
   "scripts": {

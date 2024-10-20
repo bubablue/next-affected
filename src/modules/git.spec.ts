@@ -18,7 +18,7 @@ describe("getChangedFiles", () => {
     const head = "feature-branch";
     const projectDir = "/path/to/project";
 
-    const result = getChangedFiles(base, head, projectDir);
+    const result = getChangedFiles({ base, head, projectDir });
 
     expect(mockExecSync).toHaveBeenCalledWith(
       `git diff --name-only ${base} ${head}`,
@@ -35,7 +35,7 @@ describe("getChangedFiles", () => {
     const head = "feature-branch";
     const projectDir = "/path/to/project";
 
-    const result = getChangedFiles(base, head, projectDir);
+    const result = getChangedFiles({ base, head, projectDir });
 
     expect(mockExecSync).toHaveBeenCalledWith(
       `git diff --name-only ${base} ${head}`,
@@ -61,7 +61,7 @@ describe("getChangedFiles", () => {
     const head = "feature-branch";
     const projectDir = "/path/to/project";
 
-    expect(() => getChangedFiles(base, head, projectDir)).toThrow(
+    expect(() => getChangedFiles({ base, head, projectDir })).toThrow(
       "process.exit was called"
     );
 

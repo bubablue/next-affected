@@ -9,7 +9,7 @@ const program = new Command();
 program
   .name("next-affected")
   .description("List Next.js pages affected by changes")
-  .version("0.0.2");
+  .version("0.1.0");
 
 program
   .command("init")
@@ -30,12 +30,14 @@ program
     parseInt
   )
   .option("-v, --verbose", "Enable verbose logging")
+  .option("-u, --uncommitted", "Include uncommitted changes")
   .on("--help", () => {
     console.log("");
     console.log("Examples:");
     console.log("  $ next-affected run src/components/Button.tsx");
     console.log("  $ next-affected run --base main");
     console.log("  $ next-affected run --base commit1 --head commit2");
+    console.log("  $ next-affected run --include-uncommitted");
   })
   .action(async (componentPath: string | undefined, options: any) => {
     await runNextAffected(componentPath, options);
