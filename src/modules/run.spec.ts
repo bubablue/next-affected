@@ -102,6 +102,7 @@ describe("runNextAffected", () => {
       base: "main",
       head: "HEAD",
       includeUncommitted: false,
+      onlyUncommitted: false,
       projectDir: "/resolved/path",
     });
     expect(findAffectedPages).toHaveBeenCalledWith(

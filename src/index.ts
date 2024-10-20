@@ -9,7 +9,7 @@ const program = new Command();
 program
   .name("next-affected")
   .description("List Next.js pages affected by changes")
-  .version("0.1.0");
+  .version("0.1.1");
 
 program
   .command("init")
@@ -18,7 +18,7 @@ program
     initConfig();
   });
 
-program
+  program
   .command("run [componentPath]")
   .description("List Next.js pages affected by changes")
   .option("-p, --project <path>", "Path to the Next.js project", ".")
@@ -31,13 +31,15 @@ program
   )
   .option("-v, --verbose", "Enable verbose logging")
   .option("-u, --uncommitted", "Include uncommitted changes")
+  .option("-o, --only-uncommitted", "Only include uncommitted changes")
   .on("--help", () => {
     console.log("");
     console.log("Examples:");
     console.log("  $ next-affected run src/components/Button.tsx");
     console.log("  $ next-affected run --base main");
     console.log("  $ next-affected run --base commit1 --head commit2");
-    console.log("  $ next-affected run --include-uncommitted");
+    console.log("  $ next-affected run --uncommitted");
+    console.log("  $ next-affected run --only-uncommitted");
   })
   .action(async (componentPath: string | undefined, options: any) => {
     await runNextAffected(componentPath, options);

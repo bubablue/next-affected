@@ -22,12 +22,14 @@
   - [Steps](#steps)
 - [Troubleshooting](#troubleshooting)
 - [License](#license)
+- [Contribute](#contribute)
 
 ## Features
 
 - **Analyze Specific Components**: Find out which Next.js pages are affected by changes in a specific component.
 - **Git Integration**: Compare changes between Git commits or branches to identify affected pages.
 - **Include Uncommitted Changes**: Optionally include uncommitted changes in your analysis.
+- **Only Uncommitted Changes**: Analyze only uncommitted changes against a base commit or branch.
 - **Customizable**: Supports custom configuration for page directories and file extensions to exclude.
 - **TypeScript Support**: Works seamlessly with TypeScript and recognizes path aliases from `tsconfig.json`.
 - **Verbose Logging**: Provides detailed logs for better debugging and analysis.
@@ -83,9 +85,10 @@ next-affected run [componentPath] [options]
 ### Options
 
 - `-p, --project <path>`: Path to the Next.js project. Defaults to `.` (current directory).
-- `-b, --base <commit>`: Base commit or branch to compare changes.
+- `-b, --base <commit>`: Base commit or branch to compare changes. **Required when using `--only-uncommitted`**.
 - `-h, --head <commit>`: Head commit or branch to compare changes. Defaults to `HEAD`.
 - `-u, --uncommitted`: Include uncommitted changes in the analysis.
+- `-o, --only-uncommitted`: Analyze only uncommitted changes against the base. **Requires `--base`**.
 - `-d, --depth <number>`: Max depth for dependency traversal.
 - `-v, --verbose`: Enable verbose logging.
 
@@ -107,6 +110,16 @@ Analyze all changes including uncommitted (local) changes, listing the affected 
 next-affected run --uncommitted --base main
 ```
 
+#### Analyze Only Uncommitted Changes
+
+Analyze only the uncommitted changes in your working directory against the `main` branch:
+
+```bash
+next-affected run --only-uncommitted --base main
+```
+
+> **Note:** The `--only-uncommitted` flag requires the `--base` (`-b`) flag to specify the base commit or branch.
+
 #### Compare Changes Between Current Branch and `main`
 
 Analyze all changes between your current branch and `main`, listing the affected pages:
@@ -127,6 +140,14 @@ next-affected run --base commit1 --head commit2
 
 ```bash
 next-affected run --project /path/to/your/project --verbose
+```
+
+### Additional Help
+
+For more detailed help and options, you can run:
+
+```bash
+next-affected run --help
 ```
 
 ## Configuration
@@ -165,7 +186,7 @@ You can edit the `next-affected.config.json` file to suit your project's structu
 ### Steps:
 
 1. **Build Dependency Graph**: Uses [madge](https://github.com/pahen/madge) to build the dependency graph of your project.
-2. **Determine Changed Files**: If using Git comparison mode (`--base`), it determines the list of changed files between the two commits or branches. If `--uncommitted` is specified, it also includes uncommitted changes and untracked files.
+2. **Determine Changed Files**: If using Git comparison mode (`--base`), it determines the list of changed files between the two commits or branches. If `--uncommitted` or `--only-uncommitted` is specified, it also includes uncommitted changes and untracked files.
 3. **Traverse Dependencies**: For each changed file or specified component, it traverses the dependency graph to find all dependent modules, up to the specified depth.
 4. **Identify Affected Pages**: Filters the dependent modules to identify which are Next.js pages based on the configured `pagesDirectories`.
 
@@ -174,6 +195,7 @@ You can edit the `next-affected.config.json` file to suit your project's structu
 - **No Affected Pages Found**: Ensure that the paths in `pagesDirectories` are correct and point to your Next.js pages.
 - **Errors Executing Git Command**: Verify that the commits or branches specified in `--base` and `--head` exist and are accessible.
 - **Including Uncommitted Changes Not Working**: Make sure you have saved your changes and that they are within the project directory specified.
+- **`--only-uncommitted` Flag Not Working**: Ensure you are also specifying the `--base` flag when using `--only-uncommitted`.
 - **Verbose Logging**: Use the `--verbose` flag to enable detailed logging, which can help identify issues.
 
 ## License
