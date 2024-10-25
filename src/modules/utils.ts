@@ -33,7 +33,6 @@ export function getRouteFromPage(
   }
 
   route = route.replace(/\.(js|jsx|ts|tsx)$/, "");
-  route = route.replace(/\/index$/, "") || "/";
   return route || "/";
 }
 
