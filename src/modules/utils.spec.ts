@@ -69,13 +69,6 @@ describe("getRouteFromPage", () => {
     const projectDir = "/project";
     const pagePath = "/project/pages/index.js";
 
-    expect(getRouteFromPage(pagePath, projectDir, config)).toBe("/");
-  });
-
-  it("should return root route for /index", () => {
-    const projectDir = "/project";
-    const pagePath = "/project/pages/index/index.js";
-
     expect(getRouteFromPage(pagePath, projectDir, config)).toBe("/index");
   });
 

@@ -140,45 +140,43 @@ export function findAffectedPages(
   function traverse(module: string, depth: number) {
     if (visited.has(module) || depth > maxDepth) return;
     visited.add(module);
-
+  
     const modulePath = normalizePath(path.resolve(projectDir, module));
-
+  
     if (shouldExcludeModule(modulePath, config)) {
       return;
     }
-
+  
+    if (isPage(modulePath, projectDir, config)) {
+      const route = getRouteFromPage(modulePath, projectDir, config);
+      affectedPages.add(route);
+    }
+  
     const dependents = Object.keys(dependencyGraph).filter((key) => {
       const deps = dependencyGraph[key];
       if (!deps) return false;
-
+  
       const normalizedDeps = deps.map((dep) =>
         normalizePath(path.resolve(projectDir, dep))
       );
       return normalizedDeps.includes(modulePath);
     });
-
+  
     dependents.forEach((dependent) => {
-      const normalizedDependent = normalizePath(
-        path.resolve(projectDir, dependent)
-      );
-      if (isPage(normalizedDependent, projectDir, config)) {
-        const route = getRouteFromPage(normalizedDependent, projectDir, config);
-        affectedPages.add(route);
-      } else {
-        traverse(dependent, depth + 1);
-      }
+      traverse(dependent, depth + 1);
     });
-
+  
     processedModules++;
-
+  
     if (onProgress) {
       onProgress(1);
     }
-
+  
     if (verbose && processedModules % 100 === 0) {
       console.log(`Processed ${processedModules} modules...`);
     }
   }
+  
 
   traverse(changedComponent, 0);
 
