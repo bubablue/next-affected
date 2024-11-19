@@ -16,6 +16,7 @@ describe("isPage", () => {
   const config: NextAffectedConfig = {
     pagesDirectories: ["pages", "src/pages"],
     excludedExtensions: [".css", ".scss"],
+    excludedPaths: [],
   };
 
   beforeEach(() => {
@@ -50,6 +51,7 @@ describe("getRouteFromPage", () => {
   const config: NextAffectedConfig = {
     pagesDirectories: ["pages", "src/pages"],
     excludedExtensions: [".css", ".scss"],
+    excludedPaths: [],
   };
 
   beforeEach(() => {
@@ -100,17 +102,18 @@ describe("shouldExcludeModule", () => {
   const config: NextAffectedConfig = {
     pagesDirectories: ["pages", "src/pages"],
     excludedExtensions: [".css", ".scss"],
+    excludedPaths: [],
   };
 
   it("should return true if the module path ends with an excluded extension", () => {
     const modulePath = "/project/styles/main.css";
-
-    expect(shouldExcludeModule(modulePath, config)).toBe(true);
+    const projectDir = "/project";
+    expect(shouldExcludeModule(modulePath, config, projectDir)).toBe(true);
   });
 
   it("should return false if the module path does not end with an excluded extension", () => {
     const modulePath = "/project/pages/home.js";
-
-    expect(shouldExcludeModule(modulePath, config)).toBe(false);
+    const projectDir = "/project";
+    expect(shouldExcludeModule(modulePath, config, projectDir)).toBe(false);
   });
 });

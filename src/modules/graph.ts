@@ -40,8 +40,29 @@ export async function getDependencyGraph(
       : undefined,
     alias: aliases,
   });
-  return res.obj();
+
+  const dependencyGraph = res.obj();
+
+  // Exclude modules and their dependencies based on excludedPaths
+  const filteredDependencyGraph: Record<string, string[]> = {};
+
+  for (const module in dependencyGraph) {
+    const modulePath = normalizePath(path.resolve(projectDir, module));
+    if (shouldExcludeModule(modulePath, config, projectDir)) {
+      continue;
+    }
+
+    const dependencies = dependencyGraph[module].filter((dep) => {
+      const depPath = normalizePath(path.resolve(projectDir, dep));
+      return !shouldExcludeModule(depPath, config, projectDir);
+    });
+
+    filteredDependencyGraph[module] = dependencies;
+  }
+
+  return filteredDependencyGraph;
 }
+
 
 function getExistingEntryPoints(entryPoints: string[]): string[] {
   return entryPoints.filter((entryPoint) => fs.existsSync(entryPoint));
@@ -139,44 +160,48 @@ export function findAffectedPages(
 
   function traverse(module: string, depth: number) {
     if (visited.has(module) || depth > maxDepth) return;
-    visited.add(module);
-  
+
     const modulePath = normalizePath(path.resolve(projectDir, module));
-  
-    if (shouldExcludeModule(modulePath, config)) {
+
+    if (shouldExcludeModule(modulePath, config, projectDir)) {
       return;
     }
-  
+
+    visited.add(module);
+
     if (isPage(modulePath, projectDir, config)) {
       const route = getRouteFromPage(modulePath, projectDir, config);
       affectedPages.add(route);
     }
-  
+
     const dependents = Object.keys(dependencyGraph).filter((key) => {
       const deps = dependencyGraph[key];
       if (!deps) return false;
-  
+
       const normalizedDeps = deps.map((dep) =>
         normalizePath(path.resolve(projectDir, dep))
       );
       return normalizedDeps.includes(modulePath);
     });
-  
+
     dependents.forEach((dependent) => {
+      const dependentPath = normalizePath(path.resolve(projectDir, dependent));
+      if (shouldExcludeModule(dependentPath, config, projectDir)) {
+        return;
+      }
       traverse(dependent, depth + 1);
     });
-  
+
     processedModules++;
-  
+
     if (onProgress) {
       onProgress(1);
     }
-  
+
     if (verbose && processedModules % 100 === 0) {
       console.log(`Processed ${processedModules} modules...`);
     }
   }
-  
 
   traverse(changedComponent, 0);
 

@@ -38,12 +38,32 @@ export function getRouteFromPage(
 
 export function normalizePath(filePath: string): string {
   const absolutePath = path.resolve(filePath);
-  return absolutePath.replace(/\\/g, "/");
+  return absolutePath?.replace(/\\/g, "/");
 }
 
 export function shouldExcludeModule(
   modulePath: string,
-  config: NextAffectedConfig
+  config: NextAffectedConfig,
+  projectDir: string
 ): boolean {
-  return config.excludedExtensions.some((ext) => modulePath.endsWith(ext));
+  // Check if the module has an excluded extension
+  if (config.excludedExtensions.some((ext) => modulePath.endsWith(ext))) {
+    return true;
+  }
+
+  const normalizedModulePath = normalizePath(modulePath);
+
+  // Check if the module is within any of the excluded paths
+  if (config.excludedPaths) {
+    for (const excludedPath of config.excludedPaths) {
+      const normalizedExcludedPath = normalizePath(
+        path.resolve(projectDir, excludedPath)
+      );
+      if (normalizedModulePath.startsWith(normalizedExcludedPath)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }

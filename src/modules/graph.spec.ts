@@ -21,6 +21,7 @@ describe("findAffectedPages", () => {
   const mockConfig: NextAffectedConfig = {
     pagesDirectories: ["pages"],
     excludedExtensions: [".css"],
+    excludedPaths: [],
   };
   const mockProjectDir = "/path/to/project";
   const mockChangedComponent = "file1.ts";
