@@ -63,6 +63,7 @@ describe("runNextAffected", () => {
     mockedLoadConfig.mockReturnValue({
       pagesDirectories: ["pages"],
       excludedExtensions: [".css"],
+      excludedPaths: [],
     });
     mockedGetDependencyGraph.mockResolvedValue({
       moduleA: [],

@@ -10,6 +10,7 @@ describe("initConfig", () => {
   const defaultConfig: NextAffectedConfig = {
     pagesDirectories: ["pages", "src/pages", "app", "src/app"],
     excludedExtensions: [".css", ".scss", ".less", ".svg", ".png", ".jpg"],
+    excludedPaths: [],
   };
 
   it("should not create the config file if it already exists", () => {
@@ -50,6 +51,7 @@ describe("loadConfig", () => {
   const defaultConfig: NextAffectedConfig = {
     pagesDirectories: ["pages", "src/pages", "app", "src/app"],
     excludedExtensions: [".css", ".scss", ".less", ".svg", ".png", ".jpg"],
+    excludedPaths: [],
   };
 
   beforeEach(() => {

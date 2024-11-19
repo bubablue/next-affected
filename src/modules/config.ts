@@ -7,6 +7,7 @@ export function initConfig(): void {
   const defaultConfig: NextAffectedConfig = {
     pagesDirectories: ["pages", "src/pages", "app", "src/app"],
     excludedExtensions: [".css", ".scss", ".less", ".svg", ".png", ".jpg"],
+    excludedPaths: [],
   };
 
   if (fs.existsSync(configFileName)) {
@@ -29,6 +30,7 @@ export function loadConfig(projectDir: string): NextAffectedConfig {
     return {
       pagesDirectories: ["pages", "src/pages", "app", "src/app"],
       excludedExtensions: [".css", ".scss", ".less", ".svg", ".png", ".jpg"],
+      excludedPaths: [],
     };
   }
 }
