@@ -8,7 +8,7 @@ const program = new commander_1.Command();
 program
     .name("next-affected")
     .description("List Next.js pages affected by changes")
-    .version("1.0.0");
+    .version("1.1.0");
 program
     .command("init")
     .description("Initialize next-affected configuration")
