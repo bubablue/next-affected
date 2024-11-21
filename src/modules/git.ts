@@ -2,28 +2,35 @@ import { execSync } from "child_process";
 
 export function getChangedFiles({
   base,
-  head,
+  head = "HEAD",
   projectDir,
   includeUncommitted = false,
   onlyUncommitted = false,
 }: {
   base: string;
-  head: string | null;
+  head?: string;
   projectDir: string;
   includeUncommitted?: boolean;
   onlyUncommitted?: boolean;
 }): string[] {
   try {
+    console.log(`Base: ${base}`);
+    console.log(`Head: ${head}`);
+    console.log(`Include Uncommitted: ${includeUncommitted}`);
+    console.log(`Only Uncommitted: ${onlyUncommitted}`);
+
     let changedFiles: string[] = [];
 
     if (onlyUncommitted) {
+      // Get uncommitted changes
       const diffStdout = execSync(`git diff --name-only`, { cwd: projectDir });
       const diffFiles = diffStdout
         .toString()
         .trim()
         .split("\n")
-        .filter((file) => file);
+        .filter((file) => file.trim() !== "");
 
+      // Get untracked files
       const untrackedFiles = execSync(
         `git ls-files --others --exclude-standard`,
         { cwd: projectDir }
@@ -31,7 +38,7 @@ export function getChangedFiles({
         .toString()
         .trim()
         .split("\n")
-        .filter((file) => file);
+        .filter((file) => file.trim() !== "");
 
       changedFiles = [...diffFiles, ...untrackedFiles];
     } else {
@@ -41,17 +48,28 @@ export function getChangedFiles({
         );
       }
 
-      // Build the git diff command based on the flags
+      // Ensure base exists
+      try {
+        execSync(`git rev-parse --verify ${base}`, { cwd: projectDir });
+      } catch {
+        // Fetch the base branch if it doesn't exist locally
+        execSync(`git fetch origin ${base}`, { cwd: projectDir });
+      }
+
+      // Build the git diff command
       const gitDiffCommand = includeUncommitted
         ? `git diff --name-only ${base}`
-        : `git diff --name-only ${base} ${head}`;
+        : `git diff --name-only ${base}...${head}`;
+
 
       const diffStdout = execSync(gitDiffCommand, { cwd: projectDir });
       const diffFiles = diffStdout
         .toString()
         .trim()
         .split("\n")
-        .filter((file) => file);
+        .filter((file) => file.trim() !== "");
+
+      console.log("Diff Files:", diffFiles);
 
       if (includeUncommitted) {
         // Include untracked files
@@ -62,7 +80,7 @@ export function getChangedFiles({
           .toString()
           .trim()
           .split("\n")
-          .filter((file) => file);
+          .filter((file) => file.trim() !== "");
 
         changedFiles = [...diffFiles, ...untrackedFiles];
       } else {
@@ -70,6 +88,7 @@ export function getChangedFiles({
       }
     }
 
+    console.log("Changed Files:", changedFiles);
     return changedFiles;
   } catch (error) {
     if (error instanceof Error) {
