@@ -61,7 +61,6 @@ export function getChangedFiles({
         ? `git diff --name-only ${base}`
         : `git diff --name-only ${base}...${head}`;
 
-      console.log(`Git Diff Command: ${gitDiffCommand}`);
 
       const diffStdout = execSync(gitDiffCommand, { cwd: projectDir });
       const diffFiles = diffStdout
