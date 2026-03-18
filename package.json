@@ -1,5 +1,5 @@
 {
-  "name": "@bubablue/next-affected",
+  "name": "next-affected",
   "version": "1.2.3",
   "description": "CLI tool to list Next.js pages affected by changes",
   "main": "./dist/index.js",
