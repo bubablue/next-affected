@@ -1,213 +1,248 @@
 import * as fs from "fs";
 import madge from "madge";
 import path from "path";
-import ts from "typescript";
-import { NextAffectedConfig } from "../types";
+import { AffectedPage, DependencyGraph, NextAffectedConfig } from "../types";
+import { ReExportGraphs } from "./exports";
 import {
-  getRouteFromPage,
-  isPage,
+  classifyAppWideFile,
+  classifyPageFile,
+  findAppWideFiles,
+  isWithin,
   normalizePath,
+  RouteFile,
+  ShellFile,
   shouldExcludeModule,
 } from "./utils";
+
+const TS_CONFIG_FILES = ["tsconfig.json", "tsconfig.base.json", "jsconfig.json"];
 
 export async function getDependencyGraph(
   projectDir: string,
   config: NextAffectedConfig
-): Promise<Record<string, string[]>> {
-  const tsconfigPath = findTsConfig(projectDir);
-  const tsconfigDir = path.dirname(tsconfigPath);
+): Promise<DependencyGraph> {
+  const pagesDirectories = config.pagesDirectories
+    .map((dir) => path.resolve(projectDir, dir))
+    .filter((dir) => fs.existsSync(dir));
 
-  const parsedConfig = readTsConfig(tsconfigPath);
-  const aliases = getAliasesFromTsConfig(parsedConfig, tsconfigDir);
-
-  const possibleEntryPoints = config.pagesDirectories.map((dir) =>
-    path.join(projectDir, dir)
-  );
-
-  const entryPoints = getExistingEntryPoints(possibleEntryPoints);
-
-  if (entryPoints.length === 0) {
-    throw new Error(`No valid entry points found in ${projectDir}`);
+  if (pagesDirectories.length === 0) {
+    throw new Error(
+      `No pages directories found in ${projectDir} (checked: ${config.pagesDirectories.join(", ")})`
+    );
   }
 
-  const res = await madge(entryPoints, {
+  const appWideFiles = [
+    ...new Set(pagesDirectories.flatMap((dir) => findAppWideFiles(dir, projectDir, config))),
+  ];
+
+  const res = await madge([...pagesDirectories, ...appWideFiles], {
     baseDir: projectDir,
     fileExtensions: ["js", "jsx", "ts", "tsx"],
     includeNpm: false,
-    tsConfig: tsconfigPath,
-    webpackConfig: fs.existsSync(path.join(projectDir, "next.config.js"))
-      ? path.join(projectDir, "next.config.js")
-      : undefined,
-    alias: aliases,
+    tsConfig: findTsConfig(projectDir),
   });
 
-  const dependencyGraph = res.obj();
+  const dependencyGraph: DependencyGraph = res.obj();
+  const isExcluded = (moduleId: string) =>
+    shouldExcludeModule(
+      normalizePath(path.resolve(projectDir, moduleId)),
+      config,
+      projectDir
+    );
 
   // Exclude modules and their dependencies based on excludedPaths
-  const filteredDependencyGraph: Record<string, string[]> = {};
-
-  for (const module in dependencyGraph) {
-    const modulePath = normalizePath(path.resolve(projectDir, module));
-    if (shouldExcludeModule(modulePath, config, projectDir)) {
+  const filteredDependencyGraph: DependencyGraph = {};
+  for (const [moduleId, dependencies] of Object.entries(dependencyGraph)) {
+    if (isExcluded(moduleId)) {
       continue;
     }
-
-    const dependencies = dependencyGraph[module].filter((dep) => {
-      const depPath = normalizePath(path.resolve(projectDir, dep));
-      return !shouldExcludeModule(depPath, config, projectDir);
-    });
-
-    filteredDependencyGraph[module] = dependencies;
+    filteredDependencyGraph[moduleId] = dependencies.filter(
+      (dependency) => !isExcluded(dependency)
+    );
   }
 
   return filteredDependencyGraph;
 }
 
-
-function getExistingEntryPoints(entryPoints: string[]): string[] {
-  return entryPoints.filter((entryPoint) => fs.existsSync(entryPoint));
+export function findTsConfig(projectDir: string): string | undefined {
+  for (let dir = path.resolve(projectDir); ; dir = path.dirname(dir)) {
+    const found = TS_CONFIG_FILES.map((name) => path.join(dir, name)).find(
+      (file) => fs.existsSync(file)
+    );
+    if (found) {
+      return found;
+    }
+    if (path.dirname(dir) === dir) {
+      return undefined;
+    }
+  }
 }
 
-function findTsConfig(projectDir: string): string {
-  const possibleConfigs = ["tsconfig.json", "tsconfig.base.json"];
+export function buildDependentsIndex(
+  dependencyGraph: DependencyGraph,
+  projectDir: string
+): Map<string, string[]> {
+  const dependents = new Map<string, string[]>();
 
-  let currentDir = projectDir;
-
-  while (true) {
-    for (const configName of possibleConfigs) {
-      const tsconfigPath = path.join(currentDir, configName);
-      if (fs.existsSync(tsconfigPath)) {
-        return tsconfigPath;
+  for (const [moduleId, dependencies] of Object.entries(dependencyGraph)) {
+    const modulePath = normalizePath(path.resolve(projectDir, moduleId));
+    for (const dependency of dependencies) {
+      const dependencyPath = normalizePath(path.resolve(projectDir, dependency));
+      const existing = dependents.get(dependencyPath);
+      if (existing) {
+        existing.push(modulePath);
+      } else {
+        dependents.set(dependencyPath, [modulePath]);
       }
     }
-
-    const parentDir = path.dirname(currentDir);
-    if (parentDir === currentDir) {
-      throw new Error("Could not find tsconfig.json or tsconfig.base.json");
-    }
-    currentDir = parentDir;
   }
+
+  return dependents;
 }
 
-function readTsConfig(tsconfigPath: string): ts.ParsedCommandLine {
-  const configFile = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
+export function collectDependents(
+  seeds: string[],
+  dependents: Map<string, string[]>,
+  maxDepth: number = Infinity,
+  firstHop: (seed: string) => string[] = (seed) => dependents.get(seed) ?? [],
+  partialSeeds: ReadonlySet<string> = new Set()
+): Set<string> {
+  const reached = new Set(seeds);
+  const pending = new Set(partialSeeds);
+  let frontier = [...reached];
 
-  if (configFile.error) {
-    throw new Error(
-      ts.flattenDiagnosticMessageText(configFile.error.messageText, "\n")
-    );
+  for (let depth = 1; depth <= maxDepth && frontier.length > 0; depth++) {
+    const next: string[] = [];
+    for (const modulePath of frontier) {
+      const hop = depth === 1 ? firstHop(modulePath) : dependents.get(modulePath) ?? [];
+      for (const dependent of hop) {
+        if (!reached.has(dependent) || pending.delete(dependent)) {
+          reached.add(dependent);
+          next.push(dependent);
+        }
+      }
+    }
+    frontier = next;
   }
 
-  const configParseResult = ts.parseJsonConfigFileContent(
-    configFile.config,
-    ts.sys,
-    path.dirname(tsconfigPath)
+  return reached;
+}
+
+function buildLookupIndex(
+  lookups: ReExportGraphs["lookups"],
+  projectDir: string
+): Map<string, Map<string, string[]>> {
+  const index = new Map<string, Map<string, string[]>>();
+
+  for (const [moduleId, files] of Object.entries(lookups)) {
+    const modulePath = normalizePath(path.resolve(projectDir, moduleId));
+    for (const [file, names] of Object.entries(files)) {
+      const byName = index.get(file) ?? new Map<string, string[]>();
+      index.set(file, byName);
+      for (const name of names) {
+        const importers = byName.get(name);
+        if (importers) {
+          importers.push(modulePath);
+        } else {
+          byName.set(name, [modulePath]);
+        }
+      }
+    }
+  }
+
+  return index;
+}
+
+function collectTracedDependents(
+  seeds: string[],
+  rawDependents: Map<string, string[]>,
+  reExports: ReExportGraphs,
+  changedExports: Map<string, string[]>,
+  projectDir: string,
+  maxDepth: number
+): Set<string> {
+  const traced = buildDependentsIndex(reExports.traced, projectDir);
+  const through = buildDependentsIndex(reExports.through, projectDir);
+  const lookups = buildLookupIndex(reExports.lookups, projectDir);
+
+  const firstHop = (seed: string): string[] => {
+    const names = changedExports.get(seed);
+    if (!names) {
+      return [traced, rawDependents, through].flatMap((index) => index.get(seed) ?? []);
+    }
+    if (names.length === 0) return [];
+    const byName = lookups.get(seed);
+    return [...names, "*"].flatMap((name) => byName?.get(name) ?? []);
+  };
+
+  return collectDependents(
+    seeds,
+    traced,
+    maxDepth,
+    firstHop,
+    new Set(seeds.filter((seed) => changedExports.has(seed)))
   );
-
-  if (configParseResult.errors.length > 0) {
-    const errorMessage = configParseResult.errors
-      .map((error) => ts.flattenDiagnosticMessageText(error.messageText, "\n"))
-      .join("\n");
-    throw new Error(errorMessage);
-  }
-
-  return configParseResult;
-}
-
-function getAliasesFromTsConfig(
-  parsedConfig: ts.ParsedCommandLine,
-  tsconfigDir: string
-): { [alias: string]: string } {
-  const aliases: { [alias: string]: string } = {};
-
-  if (parsedConfig.options.paths) {
-    const paths = parsedConfig.options.paths;
-
-    for (const aliasPattern in paths) {
-      const aliasPaths = paths[aliasPattern];
-
-      // Remove the trailing '/*' from the alias if present
-      const aliasKey = aliasPattern.replace(/\/\*$/, "");
-
-      // Assume the first path mapping is the primary one
-      const targetPath = aliasPaths[0];
-
-      // Remove the trailing '/*' and resolve the absolute path
-      const targetDir = path.resolve(
-        tsconfigDir,
-        targetPath.replace(/\/\*$/, "")
-      );
-
-      aliases[aliasKey] = targetDir;
-    }
-  }
-
-  return aliases;
 }
 
 export function findAffectedPages(
-  dependencyGraph: Record<string, string[]>,
-  changedComponent: string,
+  dependencyGraph: DependencyGraph,
+  changedFiles: string[],
   projectDir: string,
   config: NextAffectedConfig,
   maxDepth: number = Infinity,
-  verbose: boolean = false,
-  onProgress?: (processedModules: number) => void
-): string[] {
-  const visited = new Set<string>();
-  const affectedPages = new Set<string>();
-  let processedModules = 0;
+  reExports?: ReExportGraphs,
+  changedExports: Map<string, string[]> = new Map()
+): AffectedPage[] {
+  const seeds = changedFiles
+    .map((file) => normalizePath(path.resolve(projectDir, file)))
+    .filter((file) => !shouldExcludeModule(file, config, projectDir));
 
-  function traverse(module: string, depth: number) {
-    if (visited.has(module) || depth > maxDepth) return;
+  const rawDependents = buildDependentsIndex(dependencyGraph, projectDir);
+  const reached = reExports
+    ? collectTracedDependents(seeds, rawDependents, reExports, changedExports, projectDir, maxDepth)
+    : collectDependents(seeds, rawDependents, maxDepth);
 
-    const modulePath = normalizePath(path.resolve(projectDir, module));
-
-    if (shouldExcludeModule(modulePath, config, projectDir)) {
-      return;
-    }
-
-    visited.add(module);
-
-    if (isPage(modulePath, projectDir, config)) {
-      const route = getRouteFromPage(modulePath, projectDir, config);
-      affectedPages.add(route);
-    }
-
-    const dependents = Object.keys(dependencyGraph).filter((key) => {
-      const deps = dependencyGraph[key];
-      if (!deps) return false;
-
-      const normalizedDeps = deps.map((dep) =>
-        normalizePath(path.resolve(projectDir, dep))
-      );
-      return normalizedDeps.includes(modulePath);
+  const affected = new Map<string, AffectedPage>();
+  const record = (file: string, page: RouteFile) => {
+    affected.set(file, {
+      route: page.route,
+      file: path.relative(projectDir, file).replace(/\\/g, "/"),
+      pagesDirectory: page.pagesDirectory,
     });
+  };
 
-    dependents.forEach((dependent) => {
-      const dependentPath = normalizePath(path.resolve(projectDir, dependent));
-      if (shouldExcludeModule(dependentPath, config, projectDir)) {
-        return;
+  const shells: ShellFile[] = [];
+  for (const file of reached) {
+    const page = classifyPageFile(file, projectDir, config);
+    if (page?.kind === "route") {
+      record(file, page);
+    } else if (page?.kind === "shell") {
+      shells.push(page);
+    }
+    shells.push(...classifyAppWideFile(file, projectDir, config));
+  }
+
+  if (shells.length > 0) {
+    for (const moduleId of Object.keys(dependencyGraph)) {
+      const file = normalizePath(path.resolve(projectDir, moduleId));
+      const page = classifyPageFile(file, projectDir, config);
+      if (
+        page?.kind === "route" &&
+        shells.some(
+          (shell) =>
+            shell.pagesDirectory === page.pagesDirectory &&
+            (page.wrappedByShells || shell.includesHandlers) &&
+            isWithin(file, shell.scope)
+        )
+      ) {
+        record(file, page);
       }
-      traverse(dependent, depth + 1);
-    });
-
-    processedModules++;
-
-    if (onProgress) {
-      onProgress(1);
-    }
-
-    if (verbose && processedModules % 100 === 0) {
-      console.log(`Processed ${processedModules} modules...`);
     }
   }
 
-  traverse(changedComponent, 0);
-
-  if (verbose) {
-    console.log(`Total modules processed: ${processedModules}`);
-  }
-
-  return Array.from(affectedPages);
+  return [...affected.values()].sort(
+    (a, b) =>
+      a.pagesDirectory.localeCompare(b.pagesDirectory) ||
+      a.route.localeCompare(b.route) ||
+      a.file.localeCompare(b.file)
+  );
 }

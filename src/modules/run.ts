@@ -1,141 +1,157 @@
+import * as fs from "fs";
 import path from "path";
+import { AffectedPage } from "../types";
 import { loadConfig } from "./config";
+import { changedExportNames, traceReExports } from "./exports";
 import { getChangedFiles } from "./git";
-import { findAffectedPages, getDependencyGraph } from "./graph";
+import { findAffectedPages, findTsConfig, getDependencyGraph } from "./graph";
+import { normalizePath } from "./utils";
+
+export interface RunOptions {
+  project: string;
+  base?: string;
+  head?: string;
+  depth?: number;
+  verbose?: boolean;
+  uncommitted?: boolean;
+  onlyUncommitted?: boolean;
+  json?: boolean;
+  files?: boolean;
+  pages?: boolean;
+}
+
+function printAffectedPages(
+  affectedPages: AffectedPage[],
+  options: RunOptions,
+  showPagesDirectory: boolean
+): void {
+  if (options.json) {
+    console.log(JSON.stringify(affectedPages, null, 2));
+    return;
+  }
+
+  if (affectedPages.length === 0) {
+    console.log("\nNo affected pages found.");
+    return;
+  }
+
+  const printList = (title: string, lines: string[]) => {
+    console.log(`\n${title}`);
+    new Set(lines).forEach((line) => console.log(line));
+  };
+
+  if (options.files || !options.pages) {
+    printList(
+      "Affected Files:",
+      affectedPages.map((page) => page.file).sort((a, b) => a.localeCompare(b))
+    );
+  }
+  if (options.pages) {
+    printList(
+      "Affected Pages:",
+      affectedPages.map((page) =>
+        showPagesDirectory ? `${page.route} (${page.pagesDirectory})` : page.route
+      )
+    );
+  }
+}
+
+async function analyze(
+  componentPath: string | undefined,
+  options: RunOptions
+): Promise<AffectedPage[]> {
+  if (!componentPath && !options.base && !options.onlyUncommitted) {
+    throw new Error(
+      "You must specify a component path, --base <commit>, or --only-uncommitted."
+    );
+  }
+
+  const verbose = (message: string) => {
+    if (options.verbose) console.error(message);
+  };
+
+  const projectDir = path.resolve(process.cwd(), options.project);
+  if (!fs.existsSync(projectDir)) {
+    throw new Error(`Project directory not found: ${projectDir}`);
+  }
+  const config = loadConfig(projectDir);
+  const existingPagesDirectories = config.pagesDirectories.filter((dir) =>
+    fs.existsSync(path.resolve(projectDir, dir))
+  );
+
+  let changedFiles: string[];
+  let readPrevious: ((files: string[]) => Map<string, string | null>) | undefined;
+  if (componentPath) {
+    // Analyze a specific component
+    changedFiles = [path.resolve(process.cwd(), componentPath)];
+  } else {
+    // Analyze changes between Git references
+    const changes = getChangedFiles({
+      base: options.base,
+      head: options.head ?? "HEAD",
+      projectDir,
+      includeUncommitted: options.uncommitted ?? false,
+      onlyUncommitted: options.onlyUncommitted ?? false,
+    });
+    changedFiles = changes.files;
+    readPrevious = changes.readPrevious;
+  }
+
+  if (changedFiles.length === 0) {
+    console.error("No changes detected.");
+    printAffectedPages([], options, false);
+    return [];
+  }
+
+  console.error(`Found ${changedFiles.length} changed file(s).`);
+  changedFiles.forEach((file) => verbose(`  ${path.relative(projectDir, file)}`));
+
+  console.error("Building dependency graph...");
+  const dependencyGraph = await getDependencyGraph(projectDir, config);
+  verbose(`Dependency graph has ${Object.keys(dependencyGraph).length} modules.`);
+
+  const tsConfigPath = findTsConfig(projectDir);
+  const reExports = traceReExports(dependencyGraph, projectDir, tsConfigPath);
+  verbose("Traced named imports through re-exports.");
+
+  const graphFiles = new Set(
+    Object.keys(dependencyGraph).map((moduleId) => normalizePath(path.resolve(projectDir, moduleId)))
+  );
+  const changedExports = readPrevious
+    ? changedExportNames(
+        changedFiles.filter((file) => graphFiles.has(normalizePath(file))),
+        readPrevious,
+        projectDir,
+        tsConfigPath
+      )
+    : new Map<string, string[]>();
+  changedExports.forEach((names, file) =>
+    verbose(`  ${path.relative(projectDir, file)}: changed exports: ${names.join(", ") || "none"}`)
+  );
+
+  const affectedPages = findAffectedPages(
+    dependencyGraph,
+    changedFiles,
+    projectDir,
+    config,
+    options.depth ?? Infinity,
+    reExports,
+    changedExports
+  );
+
+  printAffectedPages(affectedPages, options, existingPagesDirectories.length > 1);
+
+  return affectedPages;
+}
 
 export async function runNextAffected(
   componentPath: string | undefined,
-  options: {
-    project: string;
-    base?: string;
-    head?: string;
-    depth?: number;
-    verbose?: boolean;
-    uncommitted?: boolean;
-    onlyUncommitted?: boolean;
-  }
-): Promise<void> {
+  options: RunOptions
+): Promise<AffectedPage[]> {
   try {
-    if (options.verbose) console.log("Starting next-affected analysis...");
-
-    const projectDir = path.resolve(process.cwd(), options.project);
-    const config = loadConfig(projectDir);
-    const maxDepth = options.depth ?? Infinity;
-
-    console.log("Building dependency graph. This may take a while...");
-
-    const dependencyGraph = await getDependencyGraph(projectDir, config);
-
-    if (options.verbose) console.log("Dependency graph built.");
-
-    const affectedPages = new Set<string>();
-    const totalModules = Object.keys(dependencyGraph).length;
-    let totalProcessedModules = 0;
-
-    if (componentPath) {
-      // Analyze a specific component
-      if (options.verbose) console.log(`Analyzing component: ${componentPath}`);
-      const componentFullPath = path.resolve(process.cwd(), componentPath);
-      const componentRelativePath = path.relative(
-        projectDir,
-        componentFullPath
-      );
-
-      const affected = findAffectedPages(
-        dependencyGraph,
-        componentRelativePath,
-        projectDir,
-        config,
-        maxDepth,
-        options.verbose,
-        (processedModules) => {
-          totalProcessedModules += processedModules;
-          if (!options.verbose) {
-            process.stdout.write(
-              `\rProcessed modules: ${totalProcessedModules}/${totalModules}`
-            );
-          }
-        }
-      );
-      affected.forEach((page) => affectedPages.add(page));
-
-      if (!options.verbose) {
-        process.stdout.write(
-          `\rProcessed modules: ${totalProcessedModules}/${totalModules}\n`
-        );
-      }
-    } else if (options.base) {
-      // Analyze changes between Git references
-      console.log(
-        `Getting changed files between ${options.base} and ${
-          options.head ?? "HEAD"
-        }`
-      );
-      const changedFiles = getChangedFiles({
-        base: options.base,
-        head: options.head ?? "HEAD",
-        projectDir: projectDir,
-        includeUncommitted: options.uncommitted ?? false,
-        onlyUncommitted: options.onlyUncommitted ?? false,
-      });
-
-      if (changedFiles.length === 0) {
-        console.log(
-          "No changes detected between the specified commits or branches."
-        );
-        process.exit(0);
-      }
-
-      console.log(`Found ${changedFiles.length} changed files.`);
-      console.log("Analyzing affected pages...");
-
-      let processedFiles = 0;
-      const totalFiles = changedFiles.length;
-
-      for (const file of changedFiles) {
-        if (options.verbose) console.log(`Processing file: ${file}`);
-        else {
-          // Output progress every file
-          process.stdout.write(
-            `\rProcessing files: ${processedFiles + 1}/${totalFiles}`
-          );
-        }
-
-        const affected = findAffectedPages(
-          dependencyGraph,
-          file,
-          projectDir,
-          config,
-          maxDepth,
-          options.verbose,
-          (processedModules) => {
-            totalProcessedModules += processedModules;
-          }
-        );
-        affected.forEach((page) => affectedPages.add(page));
-        processedFiles++;
-      }
-
-      if (!options.verbose) {
-        process.stdout.write(
-          `\nTotal modules processed: ${totalProcessedModules}/${totalModules}\n`
-        );
-      }
-    } else {
-      console.error(
-        "Error: You must specify a component path or use --base to compare commits or branches."
-      );
-      process.exit(1);
-    }
-
-    if (affectedPages.size > 0) {
-      console.log("\nAffected Pages:");
-      affectedPages.forEach((page) => console.log(page));
-    } else {
-      console.log("\nNo affected pages found.");
-    }
-  } catch (error: any) {
-    console.error("Error:", error.message);
-    console.error(error);
+    return await analyze(componentPath, options);
+  } catch (error) {
+    console.error("Error:", error instanceof Error ? error.message : String(error));
+    return [];
   }
 }
