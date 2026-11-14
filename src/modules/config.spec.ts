@@ -1,82 +1,132 @@
 import * as fs from "fs";
 import path from "path";
-import { initConfig, loadConfig } from "../modules/config"; // Adjust import path accordingly
-import { NextAffectedConfig } from "../types";
+import { DEFAULT_CONFIG, initConfig, loadConfig } from "./config";
 
 jest.mock("fs");
-jest.mock("path");
+
+const mockedFs = jest.mocked(fs);
+const projectDir = "/path/to/project";
+const configFilePath = path.join(projectDir, "next-affected.config.json");
 
 describe("initConfig", () => {
-  const defaultConfig: NextAffectedConfig = {
-    pagesDirectories: ["pages", "src/pages", "app", "src/app"],
-    excludedExtensions: [".css", ".scss", ".less", ".svg", ".png", ".jpg"],
-    excludedPaths: [],
-  };
-
-  it("should not create the config file if it already exists", () => {
-    (fs.existsSync as jest.Mock).mockReturnValue(true);
-    const consoleSpy = jest.spyOn(console, "log");
-
-    initConfig();
-
-    expect(fs.existsSync).toHaveBeenCalledWith("next-affected.config.json");
-    expect(consoleSpy).toHaveBeenCalledWith(
-      "next-affected.config.json already exists."
-    );
-    expect(fs.writeFileSync).not.toHaveBeenCalled();
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.spyOn(console, "log").mockImplementation(() => {});
   });
 
-  it("should create the config file if it does not exist", () => {
-    (fs.existsSync as jest.Mock).mockReturnValue(false);
-    const consoleSpy = jest.spyOn(console, "log");
+  it("does not overwrite an existing config file", () => {
+    mockedFs.existsSync.mockReturnValue(true);
 
     initConfig();
 
-    expect(fs.existsSync).toHaveBeenCalledWith("next-affected.config.json");
-    expect(fs.writeFileSync).toHaveBeenCalledWith(
+    expect(console.log).toHaveBeenCalledWith("next-affected.config.json already exists.");
+    expect(mockedFs.writeFileSync).not.toHaveBeenCalled();
+  });
+
+  it("writes the default config when none exists", () => {
+    mockedFs.existsSync.mockReturnValue(false);
+
+    initConfig();
+
+    expect(mockedFs.writeFileSync).toHaveBeenCalledWith(
       "next-affected.config.json",
-      JSON.stringify(defaultConfig, null, 2)
+      JSON.stringify(DEFAULT_CONFIG, null, 2)
     );
-    expect(consoleSpy).toHaveBeenCalledWith(
+    expect(console.log).toHaveBeenCalledWith(
       "Created next-affected.config.json with default settings."
     );
   });
 });
 
 describe("loadConfig", () => {
-  const mockProjectDir = "/path/to/project";
-  const configFileName = "next-affected.config.json";
-  const configFilePath = path.join(mockProjectDir, configFileName);
-
-  const defaultConfig: NextAffectedConfig = {
-    pagesDirectories: ["pages", "src/pages", "app", "src/app"],
-    excludedExtensions: [".css", ".scss", ".less", ".svg", ".png", ".jpg"],
-    excludedPaths: [],
-  };
-
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.spyOn(console, "error").mockImplementation(() => {});
   });
 
-  it("should load the config file if it exists", () => {
-    const mockConfigContent = JSON.stringify(defaultConfig);
-    (fs.existsSync as jest.Mock).mockReturnValue(true);
-    (fs.readFileSync as jest.Mock).mockReturnValue(mockConfigContent);
+  it("returns the defaults when there is no config file", () => {
+    mockedFs.existsSync.mockReturnValue(false);
 
-    const config = loadConfig(mockProjectDir);
-
-    expect(fs.existsSync).toHaveBeenCalledWith(configFilePath);
-    expect(fs.readFileSync).toHaveBeenCalledWith(configFilePath, "utf-8");
-    expect(config).toEqual(defaultConfig);
+    expect(loadConfig(projectDir)).toEqual(DEFAULT_CONFIG);
+    expect(mockedFs.existsSync).toHaveBeenCalledWith(configFilePath);
+    expect(mockedFs.readFileSync).not.toHaveBeenCalled();
   });
 
-  it("should return the default config if the config file does not exist", () => {
-    (fs.existsSync as jest.Mock).mockReturnValue(false);
+  it("fills missing keys from the defaults", () => {
+    mockedFs.existsSync.mockReturnValue(true);
+    mockedFs.readFileSync.mockReturnValue(JSON.stringify({ pagesDirectories: ["apps/web/app"] }));
 
-    const config = loadConfig(mockProjectDir);
+    expect(loadConfig(projectDir)).toEqual({
+      ...DEFAULT_CONFIG,
+      pagesDirectories: ["apps/web/app"],
+    });
+  });
 
-    expect(fs.existsSync).toHaveBeenCalledWith(configFilePath);
-    expect(fs.readFileSync).not.toHaveBeenCalled();
-    expect(config).toEqual(defaultConfig);
+  it("logs invalid JSON and falls back to the defaults", () => {
+    mockedFs.existsSync.mockReturnValue(true);
+    mockedFs.readFileSync.mockReturnValue("{ nope");
+
+    expect(loadConfig(projectDir)).toEqual(DEFAULT_CONFIG);
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining(`could not read ${configFilePath}`)
+    );
+  });
+
+  it("logs an invalid key and uses its default while keeping the valid ones", () => {
+    mockedFs.existsSync.mockReturnValue(true);
+    mockedFs.readFileSync.mockReturnValue(
+      JSON.stringify({ excludedPaths: "packages", pagesDirectories: ["apps/shell/app"] })
+    );
+
+    expect(loadConfig(projectDir)).toEqual({
+      ...DEFAULT_CONFIG,
+      pagesDirectories: ["apps/shell/app"],
+    });
+    expect(console.error).toHaveBeenCalledWith(
+      `Error: "excludedPaths" in ${configFilePath} is invalid (expected a list of strings). Using its default.`
+    );
+  });
+
+  it("rejects patterns that are not valid regular expressions", () => {
+    mockedFs.existsSync.mockReturnValue(true);
+    mockedFs.readFileSync.mockReturnValue(JSON.stringify({ appRouter: { hiddenSegments: ["("] } }));
+
+    expect(loadConfig(projectDir).appRouter.hiddenSegments).toEqual(
+      DEFAULT_CONFIG.appRouter.hiddenSegments
+    );
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining('"appRouter.hiddenSegments"')
+    );
+  });
+
+  it("merges router conventions key by key with the defaults", () => {
+    mockedFs.existsSync.mockReturnValue(true);
+    mockedFs.readFileSync.mockReturnValue(
+      JSON.stringify({
+        appRouter: { pageFiles: ["page", "view"], interceptionMarkers: { "(.)": 0 } },
+        pagesRouter: { indexFiles: ["home"] },
+      })
+    );
+
+    const config = loadConfig(projectDir);
+
+    expect(config.appRouter).toEqual({
+      ...DEFAULT_CONFIG.appRouter,
+      pageFiles: ["page", "view"],
+      interceptionMarkers: { "(.)": 0 },
+    });
+    expect(config.pagesRouter).toEqual({ ...DEFAULT_CONFIG.pagesRouter, indexFiles: ["home"] });
+    expect(console.error).not.toHaveBeenCalled();
+  });
+
+  it("rejects interception markers that are not levels or root", () => {
+    mockedFs.existsSync.mockReturnValue(true);
+    mockedFs.readFileSync.mockReturnValue(
+      JSON.stringify({ appRouter: { interceptionMarkers: { "(..)": "up" } } })
+    );
+
+    expect(loadConfig(projectDir).appRouter.interceptionMarkers).toEqual(
+      DEFAULT_CONFIG.appRouter.interceptionMarkers
+    );
   });
 });
